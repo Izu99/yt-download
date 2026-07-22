@@ -41,6 +41,10 @@ BRAND_HI = "#d32f2f"   # red hover
 NEUTRAL  = "#2b3038"   # secondary button
 NEUTRAL_HI = "#363c46"
 LOG_BG   = "#0b0c0f"
+SUCCESS  = "#3ddc84"   # completion highlight (green)
+SUCCESS_BG = "#12351f"
+ERROR    = "#ff5a4d"   # failure highlight (red)
+ERROR_BG = "#3a1512"
 
 PAD = 26  # shared horizontal padding inside the card
 
@@ -204,10 +208,11 @@ class App(ctk.CTk):
         self.progress.set(0)
 
         self.status_var = ctk.StringVar(value="Ready")
-        ctk.CTkLabel(
+        self.status_label = ctk.CTkLabel(
             card, textvariable=self.status_var,
             font=ctk.CTkFont(size=11), text_color=MUTED,
-        ).pack(pady=(8, 6))
+        )
+        self.status_label.pack(pady=(8, 6))
 
         # ---- Log box ------------------------------------------------------
         self.log = ctk.CTkTextbox(
@@ -217,6 +222,17 @@ class App(ctk.CTk):
             border_width=1, state="disabled",
         )
         self.log.pack(padx=PAD, pady=(0, PAD), fill="both", expand=True)
+
+        # Colour tags for highlighted result banners in the log. CTkTextbox
+        # wraps a plain tk.Text, so drive tags through the underlying widget.
+        self.log._textbox.tag_config(
+            "success", foreground=SUCCESS, background=SUCCESS_BG,
+            selectbackground=SUCCESS_BG, spacing1=4, spacing3=4,
+        )
+        self.log._textbox.tag_config(
+            "error", foreground=ERROR, background=ERROR_BG,
+            selectbackground=ERROR_BG, spacing1=4, spacing3=4,
+        )
 
     def _is_video(self):
         return self.mode.get().startswith("Video")
@@ -307,6 +323,7 @@ class App(ctk.CTk):
         self.progress.set(0)
         self.progress.configure(mode="indeterminate")
         self.progress.start()
+        self.status_label.configure(text_color=MUTED)
         self.status_var.set("Starting...")
         self._clear_log()
 
@@ -378,21 +395,34 @@ class App(ctk.CTk):
             text="Download Video" if self._is_video() else "Download MP3",
         )
         if self.cancelled:
+            self.status_label.configure(text_color=MUTED)
             self.status_var.set("Cancelled.")
         elif success:
-            self.status_var.set(f"Done!  Saved to {self.folder_var.get()}")
+            folder = self.folder_var.get()
+            self.status_label.configure(text_color=SUCCESS)
+            self.status_var.set(f"✓  Done — saved to {folder}")
+            # Highlighted completion banner so a finished download is obvious
+            # at a glance amid the yt-dlp log noise.
+            self._append_log("", )
+            self._append_log(f"  ✓  DOWNLOAD COMPLETE  —  saved to {folder}  ", "success")
             self.url_entry.delete(0, "end")
         else:
-            self.status_var.set("Download failed — check the log below.")
+            self.status_label.configure(text_color=ERROR)
+            self.status_var.set("✗  Download failed — check the log below.")
+            self._append_log("", )
+            self._append_log("  ✗  DOWNLOAD FAILED  —  see the log above  ", "error")
 
     def _clear_log(self):
         self.log.configure(state="normal")
         self.log.delete("1.0", "end")
         self.log.configure(state="disabled")
 
-    def _append_log(self, line):
+    def _append_log(self, line, tag=None):
         self.log.configure(state="normal")
-        self.log.insert("end", line + "\n")
+        if tag:
+            self.log._textbox.insert("end", line + "\n", tag)
+        else:
+            self.log.insert("end", line + "\n")
         self.log.see("end")
         self.log.configure(state="disabled")
 
